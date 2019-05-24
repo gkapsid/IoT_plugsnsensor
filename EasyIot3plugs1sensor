@@ -1,0 +1,336 @@
+
+
+/* from PubSub/library examples
+ *  /
+ Basic ESP8266 MQTT example
+
+ This sketch demonstrates the capabilities of the pubsub library in combination
+ with the ESP8266 board/library.
+
+ It connects to an MQTT server then:
+  - publishes "hello world" to the topic "outTopic" every two seconds
+  - subscribes to the topic "inTopic", printing out any messages
+    it receives. NB - it assumes the received payloads are strings not binary
+  - If the first character of the topic "inTopic" is an 1, switch ON the ESP Led,
+    else switch it off
+
+ It will reconnect to the server if the connection is lost using a blocking
+ reconnect function. See the 'mqtt_reconnect_nonblocking' example for how to
+ achieve the same result without blocking the main loop.
+
+ To install the ESP8266 board, (using Arduino 1.6.4+):
+  - Add the following 3rd party board manager under "File -> Preferences -> Additional Boards Manager URLs":
+       http://arduino.esp8266.com/stable/package_esp8266com_index.json
+  - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
+  - Select your ESP8266 in "Tools -> Board"
+
+
+*/
+// code from 
+// https://iot-playground.com/blog/2-uncategorised/87-esp8266-internet-connected-switch-easyiot-cloud-mqtt-api-v1-improved
+// modified by gkapsid
+
+// Sketch for Node MCU 0.9 (ESP-12 Module)
+ 
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <EEPROM.h>
+
+// Update these with values suitable for your network.
+
+const char* mqtt_server = "cloud.iot-playground.com";
+
+#define AP_SSID     "yourSSID"
+#define AP_PASSWORD "yourPASS"  
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[50];
+int value = 0;
+
+
+
+#define CONFIG_START 0
+#define CONFIG_VERSION "v01"
+#define AP_CONNECT_TIME 10 //s
+
+//username and pass to connect to https://easyiot-cloud.com/
+#define EIOTCLOUD_USERNAME "yourUSERNAME"
+#define EIOTCLOUD_PASSWORD "yourPASS"
+
+WiFiServer server(80);
+
+struct StoreStruct {
+  // This is for mere detection if they are your settings
+  char version[4];
+  // The variables of your settings
+  //uint moduleId;  // module id
+  bool state;     // state
+  char ssid[20];
+  char pwd[20];
+} storage = {
+  CONFIG_VERSION,
+  // The default module 0
+  //0,
+  0, // off
+  AP_SSID,
+  AP_PASSWORD
+};
+
+//bool stepOk = false;
+int buttonState;
+
+//boolean result;
+//String topic("");
+//String valueStr("");
+
+boolean switchState;
+const int buttonPin1 = 0;  //pin to connect temperature or other sensor
+const int outPin1 = D5; //pin to control plug #1
+const int outPin2 = D7; //pin to control plug #2
+const int outPin3 = D8; //pin to control plug #3
+
+void setup() {
+  
+  pinMode(buttonPin1,INPUT);
+  digitalWrite(buttonPin1, HIGH);
+
+  EEPROM.begin(512);
+  
+  loadConfig();
+  
+  //initialize pinMode and pin state (low - high)
+  pinMode(outPin1,OUTPUT);
+  digitalWrite(outPin1, LOW);
+
+  pinMode(outPin2,OUTPUT);
+  digitalWrite(outPin2, LOW);
+
+pinMode(outPin3,OUTPUT);
+  digitalWrite(outPin3, LOW);
+
+
+  Serial.begin(115200);
+  setup_wifi();
+
+   int i = 0;
+
+while (WiFi.status() != WL_CONNECTED && i++ < (AP_CONNECT_TIME*2) ) {
+    delay(500);
+  }
+
+  if (!(i < (AP_CONNECT_TIME*2)))
+  {
+    AP_Setup();
+    AP_Loop();
+    ESP.reset();
+  }
+
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+}
+
+void setup_wifi() {
+
+  delay(10);
+  // We start by connecting to a WiFi network
+
+  //WiFi.begin(AP_SSID, AP_PASSWORD);
+WiFi.begin(storage.ssid, storage.pwd);
+
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  //Serial.print("Message arrived [");
+  //Serial.print(topic);
+  //Serial.print("] ");
+ for (int i = 0; i < length; i++) {
+    //Serial.print((char)payload[i]);
+  }
+  //Serial.println();
+
+  // Switch on the LED if an 1 was received as first character
+  if ((char)topic[1]=='1') {
+    if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+    digitalWrite(outPin1,HIGH); //output to GPIO D5
+    } else {
+      digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+      digitalWrite(outPin1,LOW); //output to GPIO D5
+   }
+  }  else  if ((char)topic[1]=='2') {
+   if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+    digitalWrite(outPin2,HIGH); //output to GPIO D7
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+    digitalWrite(outPin2,LOW); //output to GPIO D7
+  }
+  }
+  else if ((char)topic[1]=='3') {
+    if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is acive low on the ESP-01)
+    digitalWrite(outPin3,HIGH); //output to GPIO D8
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+    digitalWrite(outPin3,LOW); //output to GPIO D8
+  }
+  }
+  
+  }
+  
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("ESP8266Client", EIOTCLOUD_USERNAME, EIOTCLOUD_PASSWORD)) {
+      //client.publish("/4/Sensor.Parameter1", 0);
+
+      client.subscribe("/1/Sensor.Parameter1");
+      client.subscribe("/2/Sensor.Parameter1");
+      client.subscribe("/3/Sensor.Parameter1");
+    } else {
+      delay(5000);
+    }
+  }
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  
+  long now = millis();
+  if (now - lastMsg > 2000) {
+    lastMsg = now;
+    value = analogRead(A0)*330/1024;
+    //++value;
+    snprintf (msg, 75, "%ld", value);
+    //Serial.print("Publish message: ");
+    //Serial.println(msg);
+    client.publish("/4/Sensor.Parameter1", msg);
+  }
+ 
+  client.loop();
+  
+}
+
+void loadConfig() {
+  // To make sure there are settings, and they are YOURS!
+  // If nothing is found it will use the default settings.
+  if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
+      EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
+      EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
+    for (unsigned int t=0; t<sizeof(storage); t++)
+      *((char*)&storage + t) = EEPROM.read(CONFIG_START + t);
+}
+
+void saveConfig() {
+  for (unsigned int t=0; t<sizeof(storage); t++)
+    EEPROM.write(CONFIG_START + t, *((char*)&storage + t));
+
+  EEPROM.commit();
+}
+
+String macToStr(const uint8_t* mac)
+{
+  String result;
+  for (int i = 0; i < 6; ++i) {
+    result += String(mac[i], 16);
+    if (i < 5)
+      result += ':';
+  }
+  return result;
+}
+
+void AP_Setup(void){
+  //Serial.println("setting mode");
+  WiFi.mode(WIFI_AP);
+
+  String clientName;
+  clientName += "Thing-";
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  clientName += macToStr(mac); 
+  //Serial.println("starting ap");
+  WiFi.softAP((char*) clientName.c_str(), "");
+  //Serial.println("running server");
+  server.begin();
+}
+
+void AP_Loop(void){
+
+  bool  inf_loop = true;
+  int  val = 0;
+  WiFiClient client;
+
+  //Serial.println("AP loop");
+
+  while(inf_loop){
+    while (!client){
+    //  Serial.print(".");
+      delay(100);
+      client = server.available();
+    }
+    String ssid;
+    String passwd;
+    // Read the first line of the request
+    String req = client.readStringUntil('\r');
+    client.flush();
+
+    // Prepare the response. Start with the common header:
+    String s = "HTTP/1.1 200 OK\r\n";
+    s += "Content-Type: text/html\r\n\r\n";
+    s += "<!DOCTYPE HTML>\r\n<html>\r\n";
+
+    if (req.indexOf("&") != -1){
+      int ptr1 = req.indexOf("ssid=", 0);
+      int ptr2 = req.indexOf("&", ptr1);
+      int ptr3 = req.indexOf(" HTTP/",ptr2);
+      ssid = req.substring(ptr1+5, ptr2);
+      passwd = req.substring(ptr2+10, ptr3);    
+      val = -1;
+    }
+
+    if (val == -1){
+      strcpy(storage.ssid, ssid.c_str());
+      strcpy(storage.pwd, passwd.c_str());
+      
+      saveConfig();
+      //storeAPinfo(ssid, passwd);
+      s += "Setting OK";
+      s += "<br>"; // Go to the next line.
+      s += "Continue / reboot";
+      inf_loop = false;
+    }
+
+    else{
+      String content="";
+      // output the value of each analog input pin
+      content += "<form method=get>";
+      content += "<label>SSID</label><br>";
+      content += "<input  type='text' name='ssid' maxlength='19' size='15' value='"+ String(storage.ssid) +"'><br>";
+      content += "<label>Password</label><br>";
+      content += "<input  type='password' name='password' maxlength='19' size='15' value='"+ String(storage.pwd) +"'><br><br>";
+      content += "<input  type='submit' value='Submit' >";
+      content += "</form>";
+      s += content;
+    }
+    
+    s += "</html>\n";
+    // Send the response to the client
+    client.print(s);
+    delay(1);
+    client.stop();
+  }
+}
