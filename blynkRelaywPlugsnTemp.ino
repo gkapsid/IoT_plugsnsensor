@@ -1,8 +1,8 @@
 //gkapsid
-//worked 06/04/2022
+//05/05/2022 NOT tested
+// designed to control 3 plugs and to receive temperature from one LM35 thermometer
 //needs modification according https://docs.blynk.io/en/blynk.cloud/troubleshooting
-// Controls an ESP8266 output
-
+// Controls an ESP8266 NodeMCU
 
 /*************************************************************
   Download latest Blynk library here:
@@ -22,20 +22,6 @@
   Blynk library is licensed under MIT license
   This example code is in public domain.
 
- *************************************************************
-
-  This example shows how value can be pushed from Arduino to
-  the Blynk App.
-
-  WARNING :
-  For this example you'll need Adafruit DHT sensor libraries:
-    https://github.com/adafruit/Adafruit_Sensor
-    https://github.com/adafruit/DHT-sensor-library
-
-  App project setup:
-    Value Display widget attached to V0
-    Value Display widget attached to V1
- *************************************************************/
 
 /* Comment this out to disable prints and save space */
 #define BLYNK_PRINT Serial
@@ -52,11 +38,11 @@ char auth[] = "";
 // Your WiFi credentials.
 // Set password to "" for open networks.
 char ssid[] = "your_SSID";
-char pass[] = "your_PSSWD";
+char pass[] = "your_PASS";
 bool debug = false;
 #define DHTPIN 14          // What digital pin we're connected to
 
-float sensorData;
+float lmTemp;
 
 BlynkTimer timer;
 
@@ -76,12 +62,33 @@ BLYNK_WRITE(V3) // Executes when the value of virtual pin 0 changes
   }
 }
 
-void myTimerEvent()
+BLYNK_WRITE(V5) // Executes when the value of virtual pin 0 changes
 {
-  sensorData = analogRead(A0);
-  Blynk.virtualWrite(V5, sensorData);
+  if(param.asInt() == 1)
+  {
+    // execute this code if the switch widget is now ON
+    digitalWrite(D7,HIGH);  // Set digital pin 2 HIGH
+  }
+  else
+  {
+    // execute this code if the switch widget is now OFF
+    digitalWrite(D7,LOW);  // Set digital pin 2 LOW    
+  }
 }
 
+BLYNK_WRITE(V6) // Executes when the value of virtual pin 0 changes
+{
+  if(param.asInt() == 1)
+  {
+    // execute this code if the switch widget is now ON
+    digitalWrite(D8,HIGH);  // Set digital pin 2 HIGH
+  }
+  else
+  {
+    // execute this code if the switch widget is now OFF
+    digitalWrite(D8,LOW);  // Set digital pin 2 LOW    
+  }
+}
 
 void setup()
 {
@@ -95,7 +102,10 @@ void setup()
   Blynk.begin(auth, ssid, pass, "fra1.blynk.cloud", 80); // gkapsid: here is specified a custom service in case of Invalid auth key error
   //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8080);
   pinMode(D5, OUTPUT);
-    timer.setInterval(1000L, myTimerEvent);
+
+   // Setup a function to be called every second
+  timer.setInterval(5000L, tempMeas);
+  
   
 }
 
@@ -113,4 +123,9 @@ void loop()
   }
   timer.run();
 
+}
+
+void tempMeas() {
+      lmTemp = analogRead(A0)*330/1024;
+      Blynk.virtualWrite(V4, lmTemp);
 }
