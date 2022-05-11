@@ -102,6 +102,9 @@ void setup()
   Blynk.begin(auth, ssid, pass, "fra1.blynk.cloud", 80); // gkapsid: here is specified a custom service in case of Invalid auth key error
   //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8080);
   pinMode(D5, OUTPUT);
+  pinMode(D7, OUTPUT);
+  pinMode(D8, OUTPUT);
+
 
    // Setup a function to be called every second
   timer.setInterval(5000L, tempMeas);
